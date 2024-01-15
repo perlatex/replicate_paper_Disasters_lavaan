@@ -1,0 +1,324 @@
+---
+title: "Climate Change and Disasters"
+author: ""
+date: "`r Sys.Date()`"
+output: 
+  officedown::rdocx_document:
+    number_sections: yes
+    df_print: kable
+link-citations: yes
+linkcolor: red
+urlcolor: red
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    echo         = FALSE,
+    warning      = FALSE, 
+    message      = FALSE,
+    fig.asp      = 0.818,
+    dpi          = 300,
+    fig.showtext = TRUE
+)
+options(
+  digits = 4,
+  knitr.kable.NA = ''
+)
+```
+
+
+# Disasters
+
+```{r}
+library(tidyverse)
+library(lavaan)
+library(processR)
+d <- processR::disaster
+d %>% glimpse()
+sjPlot::view_df(d)
+```
+
+
+# Results
+
+## The Effects of Disaster Framing on Beliefs About Disaster Cause
+
+no Beliefs data
+
+```{r, eval=FALSE}
+d %>% 
+  group_by(frame) %>% 
+  summarise(
+    n = n(),
+    across(c(skeptic, justify), list(mean = mean, sd = sd))
+  )
+```
+
+
+
+
+## The Impact of Disaster Framing on Donation Justifications(page 4)
+
+路径a
+
+```{r}
+labels <- list(X = "skeptic", Y = "justify", W = "frame")
+pmacroModel(1, labels = labels)
+```
+
+
+
+```{r}
+library(modelsummary)
+
+dc <- d %>% 
+   mutate(across(c(skeptic), ~ .x - mean(.x))) %>% 
+   mutate(frame = as.factor(frame))
+
+
+mod1 <- lm(justify ~ skeptic,                         data = dc)
+mod2 <- lm(justify ~ skeptic + frame + frame:skeptic, data = dc)
+
+lst(mod1, mod2) %>% 
+  modelsummary::modelsummary(
+    estimate   = "{estimate}{stars}",
+    statistic  = c("conf.low", "conf.high", "p.value"),
+    shape      = term ~ model + statistic,
+    fmt        = fmt_statistic(estimate = 3),
+    coef_omit  = "(Intercept)",
+    output     = "gt"
+  ) %>% 
+  gt::data_color( 
+    columns = 6,
+    rows    = 3,
+    colors  = "orange"
+  ) 
+```
+
+
+
+```{r}
+library(marginaleffects)
+
+mod2 %>% 
+  marginaleffects::slopes(
+    variables = "skeptic",
+    newdata   = datagrid(frame = c(0, 1))
+  ) %>% 
+  as_tibble()
+```
+
+
+
+
+
+```{r}
+library(marginaleffects)
+
+mod2 %>%
+  marginaleffects::comparisons(
+    variables = list(frame = c(0, 1)),
+    newdata   = datagrid(skeptic = function(x) c(-sd(x), sd(x)))
+  ) %>%
+  as_tibble() 
+```
+
+
+
+```{r}
+library(marginaleffects)
+mod2 %>%
+  marginaleffects::predictions(
+    newdata = datagrid(
+      frame = unique,
+      skeptic = function(x) c(sd(x), -sd(x))
+    )
+  ) %>%
+  as_tibble() 
+```
+
+
+
+Figure 1
+
+```{r}
+library(marginaleffects)
+
+mod2 %>%
+  marginaleffects::predictions(
+    newdata = datagrid(
+      frame = unique,
+      skeptic = function(x) c(sd(x), -sd(x))
+    )
+  ) %>%
+  as_tibble() %>%
+  mutate(across(c(frame, skeptic), as.factor)) %>%
+  ggplot(aes(x = skeptic, y = estimate, group = frame)) +
+  geom_point(size = 2) +
+  geom_line(aes(linetype = frame), size = 1.5) +
+  geom_text(aes(label = round(estimate, 2)), vjust = -1) +
+  scale_x_discrete(
+    name   = "climate change skeptic",
+    labels = c("Low skeptic(-1SD)", "High skeptic(+1SD)")
+  ) +
+  scale_y_continuous(
+    name   = "Donation justifications",
+    limits = c(1, 5),
+    expand = c(0, 0)
+  ) +
+  scale_linetype_manual(
+    name   = NULL,
+    values = c("solid", "dotted"),
+    labels = c("Control condition", "Climate change condition")
+  ) +
+  theme_classic(base_size = 16) +
+  theme(
+    legend.position  = c(0.5, 0.95),
+    legend.direction = "horizontal",
+    axis.ticks.x     = element_blank()
+  ) 
+```
+
+
+```{r}
+library(interactions)
+mod2 %>% 
+  interactions::interact_plot(
+    modx  = "frame", 
+    pred  = "skeptic"
+  )
+```
+
+
+
+
+## Donation Justifications and Attitudes About Donating: Moderated Mediation Analysis
+
+路径c
+
+```{r}
+labels <- list(X = "skeptic", Y = "donate", W = "frame")
+pmacroModel(1, labels = labels)
+```
+
+
+
+```{r}
+library(modelsummary)
+
+dc <- d %>% 
+   mutate(across(c(skeptic), ~ .x - mean(.x))) %>% 
+   mutate(frame = as.factor(frame))
+
+mod1 <- lm(donate ~ skeptic,                         data = dc)
+mod2 <- lm(donate ~ skeptic + frame + frame:skeptic, data = dc)
+
+lst(mod1, mod2) %>% 
+  modelsummary::modelsummary(
+    estimate   = "{estimate}{stars}",
+    statistic  = c("conf.low", "conf.high", "p.value"),
+    shape      = term ~ model + statistic,
+    fmt        = fmt_statistic(estimate = 3),
+    coef_omit  = "(Intercept)",
+    output     = "gt"
+  ) %>% 
+  gt::data_color( 
+    columns = 6,
+    rows    = 3,
+    colors  = "orange"
+  ) 
+```
+
+
+```{r}
+mod2 %>% 
+  marginaleffects::slopes(
+    variables = "skeptic",
+    newdata = datagrid( frame = c(0, 1) )
+  ) %>% 
+  as_tibble()
+```
+
+
+## SEM
+
+```{r}
+labels <- list(X = "skeptic", M = "justify", Y = "donate", W = "frame")
+pmacroModel(8, labels = labels)
+```
+
+```{r}
+moderator <- list(name = "frame", site = list(c("a", "c")))
+
+model <- tripleEquation(X = "skeptic", 
+                        M = "justify",
+                        Y = "donate", moderator = moderator)
+cat(model)
+```
+
+
+```{r}
+model <- "
+
+  justify ~ a1*skeptic + a2*frame + a3*skeptic:frame
+  donate  ~ c1*skeptic + c2*frame + c3*skeptic:frame + b*justify
+  
+  frame   ~  frame.mean*1
+  frame   ~~ frame.var*frame
+  
+  index.mod.med       := a3*b
+  
+  CE.XonM             := a1 + a3*frame.mean
+  CE.XonM.below       := a1 + a3*0
+  CE.XonM.above       := a1 + a3*1
+  
+
+  indirect            := (a1 + a3*frame.mean)*(b)
+  indirect.below      := (a1 + a3*0)*(b)
+  indirect.above      := (a1 + a3*1)*(b)
+  
+  direct              := c1 + c3*frame.mean
+  direct.below        := c1 + c3*0
+  direct.above        := c1 + c3*1
+  
+  total               := direct + indirect
+  total.below         := direct.below + indirect.below
+  total.above         := direct.above + indirect.above
+  
+  prop.mediated       := indirect / total
+  prop.mediated.below := indirect.below / total.below
+  prop.mediated.above := indirect.above / total.above
+  
+"
+
+
+semfit <- sem(model, 
+              data      = d, 
+              estimator = "ML", 
+              se        = "bootstrap",
+              bootstrap = 1000,
+              mimic     = "Mplus")
+
+summary(semfit)
+```
+
+
+
+```{r}
+semfit %>% 
+  parameterEstimates(standardized = TRUE) %>% 
+  filter(op %in% c("~", ":=")) %>%  
+  select(-lhs, -op, -rhs) %>% 
+  flextable::flextable() %>% 
+  flextable::colformat_double(digits = 3) %>% 
+  flextable::color(i = ~ str_detect(label,"indirect"), color = "red") %>% 
+  flextable::autofit()
+```
+
+
+```{r}
+processR::conditionalEffectPlot(semfit, data = d, mod = "frame")
+```
+
+
